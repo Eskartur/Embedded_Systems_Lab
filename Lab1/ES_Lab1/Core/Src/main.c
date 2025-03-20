@@ -18,7 +18,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include "cmsis_os2.h"
+#include "cmsis_os.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -66,7 +66,27 @@ osThreadId_t myTask02Handle;
 const osThreadAttr_t myTask02_attributes = {
   .name = "myTask02",
   .stack_size = 128 * 4,
-  .priority = (osPriority_t) osPriorityNormal,
+  .priority = (osPriority_t) osPriorityHigh7,
+};
+/* Definitions for myQueue01 */
+osMessageQueueId_t myQueue01Handle;
+const osMessageQueueAttr_t myQueue01_attributes = {
+  .name = "myQueue01"
+};
+/* Definitions for myTimer01 */
+osTimerId_t myTimer01Handle;
+const osTimerAttr_t myTimer01_attributes = {
+  .name = "myTimer01"
+};
+/* Definitions for myMutex01 */
+osMutexId_t myMutex01Handle;
+const osMutexAttr_t myMutex01_attributes = {
+  .name = "myMutex01"
+};
+/* Definitions for myBinarySem02 */
+osSemaphoreId_t myBinarySem02Handle;
+const osSemaphoreAttr_t myBinarySem02_attributes = {
+  .name = "myBinarySem02"
 };
 /* USER CODE BEGIN PV */
 osThreadId_t buttonTaskHandle;
@@ -89,7 +109,7 @@ static void MX_USART3_UART_Init(void);
 static void MX_USB_OTG_FS_PCD_Init(void);
 void StartTask01(void *argument);
 void StartTask02(void *argument);
-void StartButtonTask(void *argument);
+void Callback01(void *argument);
 
 /* USER CODE BEGIN PFP */
 
@@ -97,15 +117,14 @@ void StartButtonTask(void *argument);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
+uint32_t timestamp;
+uint16_t blink_mode;
 /* USER CODE END 0 */
 
 /**
   * @brief  The application entry point.
   * @retval int
   */
-osEventFlagsId_t button_press;
-osMutexId_t led_blink;
 int main(void)
 {
 
@@ -144,18 +163,34 @@ int main(void)
 
   /* Init scheduler */
   osKernelInitialize();
+  /* Create the mutex(es) */
+  /* creation of myMutex01 */
+  myMutex01Handle = osMutexNew(&myMutex01_attributes);
 
   /* USER CODE BEGIN RTOS_MUTEX */
   /* add mutexes, ... */
   /* USER CODE END RTOS_MUTEX */
 
+  /* Create the semaphores(s) */
+  /* creation of myBinarySem02 */
+  myBinarySem02Handle = osSemaphoreNew(1, 1, &myBinarySem02_attributes);
+
   /* USER CODE BEGIN RTOS_SEMAPHORES */
   /* add semaphores, ... */
   /* USER CODE END RTOS_SEMAPHORES */
 
+  /* Create the timer(s) */
+  /* creation of myTimer01 */
+  myTimer01Handle = osTimerNew(Callback01, osTimerPeriodic, NULL, &myTimer01_attributes);
+
   /* USER CODE BEGIN RTOS_TIMERS */
   /* start timers, add new ones, ... */
+  osTimerStart(myTimer01Handle, 10000);
   /* USER CODE END RTOS_TIMERS */
+
+  /* Create the queue(s) */
+  /* creation of myQueue01 */
+  myQueue01Handle = osMessageQueueNew (1, sizeof(uint16_t), &myQueue01_attributes);
 
   /* USER CODE BEGIN RTOS_QUEUES */
   /* add queues, ... */
@@ -170,13 +205,11 @@ int main(void)
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
-  buttonTaskHandle = osThreadNew(StartButtonTask, NULL, &buttonTask_attributes);
+  //buttonTaskHandle = osThreadNew(StartButtonTask, NULL, &buttonTask_attributes);
   /* USER CODE END RTOS_THREADS */
 
   /* USER CODE BEGIN RTOS_EVENTS */
   /* add events, ... */
-  button_press = osEventFlagsNew(NULL);
-  led_blink = osMutexNew(NULL);
   /* USER CODE END RTOS_EVENTS */
 
   /* Start scheduler */
@@ -309,7 +342,7 @@ static void MX_I2C2_Init(void)
 
   /* USER CODE END I2C2_Init 1 */
   hi2c2.Instance = I2C2;
-  hi2c2.Init.Timing = 0x00000E14;
+  hi2c2.Init.Timing = 0x10D19CE4;
   hi2c2.Init.OwnAddress1 = 0;
   hi2c2.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
   hi2c2.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
@@ -718,13 +751,14 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
   {
   case GPIO_PIN_13:
 	  //HAL_GPIO_TogglePin(GPIOB, LED2_Pin);
-	  if (!HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_13)) //rising edge
+	  if (!HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_13)) //button press
 	  {
-		  //osEventFlagsSet(button_press, 0x0001);
+		  timestamp = HAL_GetTick();
 	  }
-	  else //falling edge
+	  else //button release
 	  {
-		  osEventFlagsSet(button_press, 0x0001);
+		  blink_mode = (HAL_GetTick() - timestamp >= 1000);
+		  osMessageQueuePut(myQueue01Handle, &blink_mode, NULL, 0);
 	  }
     break;
   default:
@@ -744,19 +778,28 @@ void StartTask01(void *argument)
 {
   /* USER CODE BEGIN 5 */
   /* Infinite loop */
+	uint16_t blink_mode_rcv;
   for(;;)
   {
-	  osEventFlagsWait(button_press, 0x0001, osFlagsWaitAny, osWaitForever);
-	  osMutexAcquire(led_blink, osWaitForever);
-	  HAL_NVIC_DisableIRQ(EXTI15_10_IRQn); // Disable button interrupt
-	  for(int i=0; i<10; i++)
+	  osMessageQueueGet(myQueue01Handle, &blink_mode_rcv, NULL, osWaitForever);
+	  osMutexAcquire(myMutex01Handle, osWaitForever);
+	  if (blink_mode_rcv)
 	  {
-		  HAL_GPIO_TogglePin(GPIOB, LED2_Pin);
-		  osDelay(500);
+		  for(int i=0; i<100; i++)
+		  {
+			  HAL_GPIO_TogglePin(GPIOB, LED2_Pin);
+			  osDelay(50);
+		  }
 	  }
-	  __HAL_GPIO_EXTI_CLEAR_FLAG(GPIO_PIN_13); // Clear pending EXTI interrupt
-	  HAL_NVIC_EnableIRQ(EXTI15_10_IRQn); // Re-enable button interrupt
-	  osMutexRelease(led_blink);
+	  else
+	  {
+		  for(int i=0; i<10; i++)
+		  {
+			  HAL_GPIO_TogglePin(GPIOB, LED2_Pin);
+			  osDelay(500);
+		  }
+	  }
+	  osMutexRelease(myMutex01Handle);
   }
   /* USER CODE END 5 */
 }
@@ -774,27 +817,24 @@ void StartTask02(void *argument)
   /* Infinite loop */
   for(;;)
   {
-	  osDelay(8000);
-	  osMutexAcquire(led_blink, osWaitForever);
-	  HAL_NVIC_DisableIRQ(EXTI15_10_IRQn); // Disable button interrupt
+	  osSemaphoreAcquire(myBinarySem02Handle, osWaitForever);
+	  osMutexAcquire(myMutex01Handle, osWaitForever);
 	  for(int i=0; i<40; i++)
 	  {
 		  HAL_GPIO_TogglePin(GPIOB, LED2_Pin);
 		  osDelay(50);
 	  }
-	  __HAL_GPIO_EXTI_CLEAR_FLAG(GPIO_PIN_13); // Clear pending EXTI interrupt
-	  HAL_NVIC_EnableIRQ(EXTI15_10_IRQn); // Re-enable button interrupt
-	  osMutexRelease(led_blink);
+	  osMutexRelease(myMutex01Handle);
   }
   /* USER CODE END StartTask02 */
 }
 
-void StartButtonTask(void *argument) //for detecting long press
+/* Callback01 function */
+void Callback01(void *argument)
 {
-  for(;;)
-  {
-	  osDelay(osWaitForever); //Bonus A: not implemented yet
-  }
+  /* USER CODE BEGIN Callback01 */
+	osSemaphoreRelease(myBinarySem02Handle);
+  /* USER CODE END Callback01 */
 }
 
 /**
