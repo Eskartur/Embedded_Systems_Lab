@@ -1,0 +1,10 @@
+../Core/Src/wifi.c:40:5:checkWifiEvent	4
+../Core/Src/wifi.c:55:5:getWifiModuleReady	4
+../Core/Src/wifi.c:115:6:littleToBig	3
+../Core/Src/wifi.c:127:6:bigToLittle	3
+../Core/Src/wifi.c:77:6:sendCommand	5
+../Core/Src/wifi.c:139:6:setSensor	2
+../Core/Src/wifi.c:159:6:setDataInt	2
+../Core/Src/wifi.c:185:6:setDataFloat	2
+../Core/Src/wifi.c:211:6:sendData	2
+../Core/Src/wifi.c:240:6:startWifi	1
