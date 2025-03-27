@@ -18,27 +18,30 @@ MAX_POINTS = 100
 
 # Initialize Matplotlib
 plt.ion()
-fig, (ax_x, ax_y, ax_z) = plt.subplots(3, sharex=True)
+fig, (ax_x, ax_y, ax_z, ax_s) = plt.subplots(4, sharex=True)
 
 # Initialize data storage
 plot_data = {
     "x": [0] * MAX_POINTS,
     "y": [0] * MAX_POINTS,
-    "z": [0] * MAX_POINTS
+    "z": [0] * MAX_POINTS,
+    "s": [0] * MAX_POINTS,
 }
 
 # Create plot lines
 line_x, = ax_x.plot(plot_data["x"], "r", label="Acc X")
 line_y, = ax_y.plot(plot_data["y"], "g", label="Acc Y")
 line_z, = ax_z.plot(plot_data["z"], "b", label="Acc Z")
+line_s, = ax_s.plot(plot_data["z"], "k", label="Sign M")
 
 # Set fixed y-axis limits (Adjust based on expected sensor range)
 ax_x.set_ylim(-2, 2)
 ax_y.set_ylim(-2, 2)
 ax_z.set_ylim(-2, 2)
+ax_s.set_ylim(-2, 2)
 
 # Add legends and grid
-for ax in [ax_x, ax_y, ax_z]:
+for ax in [ax_x, ax_y, ax_z, ax_s]:
     ax.legend()
     ax.grid(True)
 
@@ -47,7 +50,7 @@ plt.show(block=False)
 def update_plot(acc):
     """ Updates the plot with new accelerometer data. """
     # Shift old data left and add new data at the end
-    for axis, value in zip(["x", "y", "z"], [float(acc["x"])/1024, float(acc["y"])/1024, float(acc["z"])/1024]):
+    for axis, value in zip(["x", "y", "z", "s"], [float(acc["x"])/1024, float(acc["y"])/1024, float(acc["z"])/1024, float(acc["s"])]):
         plot_data[axis].append(value)
         if len(plot_data[axis]) > MAX_POINTS:
             plot_data[axis].pop(0)
@@ -56,12 +59,14 @@ def update_plot(acc):
     line_x.set_ydata(plot_data["x"])
     line_y.set_ydata(plot_data["y"])
     line_z.set_ydata(plot_data["z"])
+    line_s.set_ydata(plot_data["s"])
 
     # Adjust x-axis dynamically
     x_range = range(len(plot_data["x"]))
     line_x.set_xdata(x_range)
     line_y.set_xdata(x_range)
     line_z.set_xdata(x_range)
+    line_s.set_xdata(x_range)
 
     ax_x.set_xlim(0, MAX_POINTS-1)  # Fix x-axis range
 
@@ -90,6 +95,7 @@ try:
                 sensor_data = get_sensor_data(data)
                 if sensor_data:
                     try:
+                        print(sensor_data)
                         acc = sensor_data["iot2tangle"][0]["data"][0]
                         update_plot(acc)
                     except (KeyError, IndexError):
